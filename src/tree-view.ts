@@ -1,33 +1,31 @@
 import * as vscode from 'vscode';
 import * as mysql from 'mysql2/promise';
 
-export class DatabaseProvider implements vscode.TreeDataProvider<DatabaseItem> {
+export class DatabaseProvider implements vscode.TreeDataProvider<BaseDatabaseItem> {
 
     constructor(private connection: mysql.Connection) {
         
     }
 
-    getTreeItem(element: DatabaseItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
+    getTreeItem(element: BaseDatabaseItem): vscode.TreeItem | Thenable<vscode.TreeItem> {
         return element;
     }
 
-    getChildren(element?: DatabaseItem): vscode.ProviderResult<DatabaseItem[]> {
+    getChildren(element?: BaseDatabaseItem): vscode.ProviderResult<BaseDatabaseItem[]> {
         if (element === undefined) {
             return this.getDatabases();
         }
         return element.getChildren();
     }
 
-    private async getDatabases(): Promise<DatabaseItem[]> {
+    private async getDatabases(): Promise<BaseDatabaseItem[]> {
         // Code to fetch the list of databases and return DatabaseItem array
         // return empty list for now
         return Promise.resolve([
-            new DatabaseItem(
-                'localhost', 
-                vscode.TreeItemCollapsibleState.Collapsed,
-                'connection',
+            new ConnectionItem(
                 this.connection,
-                new vscode.ThemeIcon('server-process')
+                'localhost', 
+                ''
             )
         ]);
     }
@@ -45,71 +43,105 @@ export class DatabaseProvider implements vscode.TreeDataProvider<DatabaseItem> {
 //     }
 // }
 
+class BaseDatabaseItem extends vscode.TreeItem {
+    getChildren(): vscode.ProviderResult<BaseDatabaseItem[]> {
+        throw new Error("Method not implemented.");
+    }
+}
 
-class DatabaseItem extends vscode.TreeItem {
+class ColumnItem extends BaseDatabaseItem {
     constructor(
         public readonly label: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly itemType: string,
-        private readonly connection: mysql.Connection,
-        readonly iconPath?: string | vscode.Uri | { light: string | vscode.Uri; dark: string | vscode.Uri } | vscode.ThemeIcon,
         readonly description?: string,
     ) {
-        super(label, collapsibleState);
+        super(label, vscode.TreeItemCollapsibleState.None);
+        this.contextValue = 'column';
+        this.iconPath = new vscode.ThemeIcon('split-horizontal');
     }
 
-    async getChildren(): Promise<DatabaseItem[]> {
-        if (this.itemType === 'connection') {
-            const [rows] = await this.connection.query('SHOW DATABASES');
+    getChildren(): vscode.ProviderResult<BaseDatabaseItem[]> {
+        return [];
+    }
+}
+
+
+class TableItem extends BaseDatabaseItem {
+    constructor(
+        private readonly connection: mysql.Connection,
+        private readonly dbSchemaName: string,
+        public readonly label: string,
+        readonly description?: string,
+    ) {
+        super(label, vscode.TreeItemCollapsibleState.Collapsed);
+        this.contextValue = 'table';
+        this.iconPath = new vscode.ThemeIcon('table');
+    }
+
+    async getChildren(): Promise<BaseDatabaseItem[]> {
+        const [rows] = await this.connection.query(`DESCRIBE ${this.dbSchemaName}.${this.label}`);
             if (Array.isArray(rows)) {
                 return rows.map((row: any) => {
-                    return new DatabaseItem(
-                        row.Database, 
-                        vscode.TreeItemCollapsibleState.Collapsed,
-                        'database',
-                        this.connection,
-                        new vscode.ThemeIcon('database'),
-                        ''
+                    return new ColumnItem(
+                        row.Field,
+                        `${row.Type}`
                     );
                 });
             }
-            return [];
-        } else if (this.itemType === 'database') {
-            // Code to fetch the tables in the database and return DatabaseItem array
-            // return empty list for now
-            await this.connection.query('USE ' + this.label);
+            return Promise.resolve([]);
+        }
+}
+
+class DbItem extends BaseDatabaseItem {
+    constructor(
+        private readonly connection: mysql.Connection,
+        public readonly label: string,
+        readonly description?: string,
+    ) {
+        super(label, vscode.TreeItemCollapsibleState.Collapsed);
+        this.contextValue = 'database';
+        this.iconPath = new vscode.ThemeIcon('database');
+    }
+
+    async getChildren(): Promise<BaseDatabaseItem[]> {
+        await this.connection.query('USE information_schema');
             // 
             const [rows] = await this.connection.query('select TABLE_NAME, TABLE_ROWS,TABLE_COMMENT from information_schema.tables where TABLE_SCHEMA = ?', [this.label]);
             if (Array.isArray(rows)) {
                 return rows.map((row: any) => {
-                    return new DatabaseItem(
-                        row['TABLE_NAME'], 
-                        vscode.TreeItemCollapsibleState.Collapsed,
-                        'table',
+                    return new TableItem(
                         this.connection,
-                        new vscode.ThemeIcon('table'),
-                        `${row['TABLE_ROWS']}`
+                        this.label,
+                        row['TABLE_NAME'], 
+                        `${row['TABLE_ROWS']}`);
+                });
+            }
+            return Promise.resolve([]);
+        }
+
+}
+
+class ConnectionItem extends BaseDatabaseItem {
+    constructor(
+        private readonly connection: mysql.Connection,
+        public readonly label: string,
+        readonly description?: string,
+    ) {
+        super(label, vscode.TreeItemCollapsibleState.Collapsed);
+        this.contextValue = 'connection';
+        this.iconPath = new vscode.ThemeIcon('server-process');
+    }
+
+    async getChildren(): Promise<BaseDatabaseItem[]> {
+        const [rows] = await this.connection.query('SHOW DATABASES');
+            if (Array.isArray(rows)) {
+                return rows.map((row: any) => {
+                    return new DbItem(
+                        this.connection,
+                        row.Database, 
+                        ''
                     );
                 });
             }
-        } else if (this.itemType === 'table') {
-            // Code to fetch the columns in the table and return DatabaseItem array
-            // return empty list for now
-            const [rows] = await this.connection.query('DESCRIBE ' + this.label);
-            if (Array.isArray(rows)) {
-                return rows.map((row: any) => {
-                    return new DatabaseItem(
-                        row.Field,
-                        vscode.TreeItemCollapsibleState.None,
-                        'column',
-                        this.connection,
-                        new vscode.ThemeIcon('split-horizontal'),
-                        `${row.Type}`
-                    );
-                });
-            } //new vscode.ThemeIcon('column')
             return Promise.resolve([]);
         }
-        return Promise.resolve([]);
-    }
 }
