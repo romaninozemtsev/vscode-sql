@@ -16,6 +16,15 @@
       {
         "command": "vscode-sql.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "vscode-sql.addConnection",
+        "title": "Add Connection",
+        "icon": "$(add)"
+      },
+      {
+        "command": "vscode-sql.createSqlNotebook",
+        "title": "Create SQL Notebook"
       }
     ],
     "viewsContainers": {
@@ -36,7 +45,27 @@
           "contextualTitle": "Database Explorer"
         }
       ]
-    }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "vscode-sql.addConnection",
+          "when": "view == databaseExplorer",
+          "group": "navigation"
+        }
+      ]
+    },
+    "notebooks": [
+      {
+        "type": "sql-notebook",
+        "displayName": "SQL Notebook",
+        "selector": [
+          {
+            "filenamePattern": "*.sql-notebook"
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
