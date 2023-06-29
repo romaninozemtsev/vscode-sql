@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { establishConnection } from './db-conn';
 
 export class SampleKernel {
 	private readonly _id = 'sql-serializer-kernel';
@@ -35,10 +36,24 @@ export class SampleKernel {
 		execution.executionOrder = ++this._executionOrder;
 		execution.start(Date.now());
 
+		const connection = await establishConnection();
+
+		await connection.query('USE information_schema');
+            // 
+        const [rows] = await connection.query('select TABLE_NAME, TABLE_ROWS,TABLE_COMMENT from information_schema.tables where TABLE_SCHEMA = ?', ['information_schema']);
 		try {
-			execution.replaceOutput([new vscode.NotebookCellOutput([
-				vscode.NotebookCellOutputItem.json(JSON.parse(cell.document.getText()))
-			])]);
+
+			if (Array.isArray(rows)) {
+				vscode.NotebookCellOutputItem.json(rows);
+
+				execution.replaceOutput([new vscode.NotebookCellOutput([
+					vscode.NotebookCellOutputItem.json(rows)
+				])]);
+			}
+
+			// execution.replaceOutput([new vscode.NotebookCellOutput([
+			// 	vscode.NotebookCellOutputItem.json(JSON.parse(cell.document.getText()))
+			// ])]);
 
 			execution.end(true, Date.now());
 		} catch (err) {
